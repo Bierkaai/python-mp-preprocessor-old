@@ -6,7 +6,7 @@ from multiprocessing import Process
 
 STOP = 0
 
-class message(object):
+class Message(object):
 
     def __init__(self, message=STOP):
         self.message = message
@@ -16,10 +16,10 @@ class StoppableProcess(Process):
     def __init__(self, message_connection):
         Process.__init__(self)
         self.messages = message_connection
+        self.stayAlive = True
 
     def run(self):
         self.beforerun()
-        self.stayAlive = True
         while self.stayAlive:
             self.process()
             self.checkmessages()

@@ -161,9 +161,7 @@ class LoggingProcess(Process, Logger):
             raise Exception("Logging queue overflow")
         elif retries > 0:
             self.warning("Had to retry {0} times to write to log"
-                         .format(retries)
-            )
-
+                         .format(retries))
 
 class ProcessLogger(Process, Logger):
     ''' Should be instantiated by main process, collects and sorts log
@@ -182,30 +180,49 @@ class ProcessLogger(Process, Logger):
         self.messagestack = []
 
     def run(self):
-        ''' Get log messages, sort them and write to logfile
+        ''' Probably good to override this method, it won't stop... Ever...
         '''
         while True:
-            queue_empty = False
-            start = time.time()
-            # TODO: make max message a parameter and seconds as well
-            while (len(self.messagestack) < 10000
-                   and not queue_empty
-                   and (time.time() - start < 5)):
-                try:
-                    message = self.log_queue.get(True, 2)
-                    self.messagestack.append(message)
-                except Empty:
-                    queue_empty = True
-            self.debug("Pulled messages from queue, stack size: {0}"
-                       .format(len(self.messagestack)))
-            self.messagestack.sort()
-            # TODO: make splitpoint a parameter
-            with open(self.logfile, 'a') as f_obj:
-                splitpoint = int(round(0.5 * len(self.messagestack)))
+            self.processlogs()
 
-                writables = [str(x) + "\n" for x in self.messagestack[:splitpoint]]
-                self.messagestack = self.messagestack[splitpoint:]
-                f_obj.writelines(writables)
+    def processlogs(self):
+        ''' Get log messages, sort them and write to logfile
+        '''
+        self.getmessages(5)
+        self.sortandwrite()
+
+    def getmessages(self, timeout=-1):
+        '''
+        :param timeout: negative timeout means: get full queue
+        :return:
+        '''
+        queue_empty = False
+        start = time.time()
+        # TODO: make max message a parameter and seconds as well
+        while (len(self.messagestack) < 10000
+               and not queue_empty
+               and ((time.time() - start < timeout) or timeout < 0)):
+            try:
+                message = self.log_queue.get(True, 2
+                self.messagestack.append(message)
+            except Empty:
+                queue_empty = True
+        if queue_empty:
+            self.fulldebug("Emptied queue, stack size: {0}"
+                           .format(len(self.messagestack)))
+        else:
+            self.fulldebug("Pulled messages from queue, stack size: {0}"
+                           .format(len(self.messagestack)))
+
+    def sortandwrite(self, split=0.5):
+        self.messagestack.sort()
+        # TODO: make splitpoint a parameter
+        with open(self.logfile, 'a') as f_obj:
+            splitpoint = int(round(0.5 * len(self.messagestack)))
+
+            writables = [str(x) + "\n" for x in self.messagestack[:splitpoint]]
+            self.messagestack = self.messagestack[splitpoint:]
+            f_obj.writelines(writables)
 
     def log(self, message):
         assert isinstance(message, LogMessage)
