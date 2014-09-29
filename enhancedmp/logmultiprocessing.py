@@ -2,6 +2,7 @@ __author__ = 'coen'
 
 import time
 import datetime
+import sys
 
 from multiprocessing import Process, JoinableQueue
 from Queue import Empty, Full
@@ -75,14 +76,35 @@ class LogMessage(object):
             self.message
         )
 
-
-class ProcessLogger(object):
+class ProcessLogger(Process):
     ''' Should be instantiated by main process, collects and sorts log
         messages
     '''
 
-    def __init__(self, *log_queues):
-        self.log_queues = log_queues
+    def __init__(self, log_queue, logfile=None):
+        super(ProcessLogger, self).__init__()
+        if logfile is None:
+            self.logfile = sys.stdout
+        else:
+            self.logfile = logfile
+        self.log_queue = log_queue
+        self.messages = []
+
+    def run(self):
+        ''' Get log messages, sort them and write to logfile
+        '''
+        with open(self.logfile, 'w') as f_obj:
+
+
+
+
+
+    def get_log_messages(self):
+        ''' Gets log messages from queue until newest is at least 3 secs old
+            Returns them sorted by timestamp
+        '''
+
+
 
 
 
@@ -92,3 +114,11 @@ class LoggingProcess(Process):
     '''
 
     def __init__(self, log_queue):
+        super(LoggingProcess, self).__init__()
+        self.log_queue = log_queue
+
+    def debug(self, message):
+        self.log_queue.put(LogMessage(DEBUG, message))
+
+    def info(self, message):
+        self.
