@@ -4,7 +4,7 @@ import sys
 import time
 import random
 
-from processors import *
+from enhancedprocessors import *
 
 from multiprocessing import Pipe
 from stoppablemultiprocessing import Message, STOP

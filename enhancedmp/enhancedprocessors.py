@@ -19,7 +19,7 @@ def setuplogging(logfile, loglevel):
 class StoppableLoggingProcess(LoggingProcess, StoppableProcess):
 
     def __init__(self, logqueue, message_conn, name):
-        Logg)ingProcess.__init__(self, logqueue, name)
+        LoggingProcess.__init__(self, logqueue, name)
         StoppableProcess.__init__(self, message_conn)
 
     def run(self):

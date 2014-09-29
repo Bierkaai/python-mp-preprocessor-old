@@ -203,7 +203,7 @@ class ProcessLogger(Process, Logger):
                and not queue_empty
                and ((time.time() - start < timeout) or timeout < 0)):
             try:
-                message = self.log_queue.get(True, 2
+                message = self.log_queue.get(True, 2)
                 self.messagestack.append(message)
             except Empty:
                 queue_empty = True
@@ -218,7 +218,7 @@ class ProcessLogger(Process, Logger):
         self.messagestack.sort()
         # TODO: make splitpoint a parameter
         with open(self.logfile, 'a') as f_obj:
-            splitpoint = int(round(0.5 * len(self.messagestack)))
+            splitpoint = int(round(split * len(self.messagestack)))
 
             writables = [str(x) + "\n" for x in self.messagestack[:splitpoint]]
             self.messagestack = self.messagestack[splitpoint:]
