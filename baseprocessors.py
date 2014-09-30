@@ -1,9 +1,10 @@
-
 __author__ = 'coen'
+import os
+import time
 
 from Queue import Full, Empty
-from enhancedmp.enhancedprocessors import setuplogging, StoppableLoggingProcess
-from enhancedmp.stoppablemultiprocessing import STOP, Message
+
+from enhancedmp.enhancedprocessors import StoppableLoggingProcess
 
 
 class Configurable(object):
@@ -15,8 +16,8 @@ class Configurable(object):
             if key in kwargs:
                 self.configdict[key] = kwargs[key]
 
-class BaseProcessor(StoppableLoggingProcess, Configurable):
 
+class BaseProcessor(StoppableLoggingProcess, Configurable):
     def __init__(self, logqueue, message_conn, name=None, **kwargs):
         super(BaseProcessor, self).__init__(
             logqueue,
@@ -26,29 +27,48 @@ class BaseProcessor(StoppableLoggingProcess, Configurable):
         self.config(**kwargs)
 
 
-class FileReader(BaseProcessor):
+class FileProcessor(BaseProcessor):
+    ''' Base class for file processors
+    '''
+
+    def __init__(self, logqueue, message_conn, filename, queue, **kwargs):
+        super(FileProcessor, self).__init__(
+            logqueue,
+            message_conn,
+            None,
+            **kwargs
+        )
+        assert (isinstance(filename, str))
+        self.filename = filename
+        self.f_obj = None
+        self.queue = queue
+
+    def afterrun(self):
+        self.info("Closing {0}".format(self.filename))
+        self.f_obj.close()
+
+
+class FileReader(FileProcessor):
+    ''' Reads from a file, to a queue
+    '''
 
     defaults = {
-        "SkipFirstLine":True,
-        "ChunkSize":200,
-        "MaxRetries":5
+        "SkipFirstLine": True,
+        "ChunkSize": 200,
+        "MaxRetries": 5,
+        "QueueTimeout": 5
     }
 
-    def __init__(self, logqueue, message_conn, filename, output_queue, **kwargs):
+    def __init__(self, logqueue, message_conn, filename, queue, **kwargs):
         super(FileReader, self).__init__(
             logqueue,
             message_conn,
-            "FileReader reading: {0}".format(filename),
+            filename,
+            queue,
             **kwargs)
-        self.fulldebug("Config: {0}".format(self.configdict))
-
-        assert(isinstance(filename, str))
-        self.filename = filename
-        self.f_obj = None
-        self.output_queue = output_queue
 
     def beforerun(self):
-        self.info("Opening {0} for reading". format(self.filename))
+        self.info("Opening {0} for reading".format(self.filename))
         self.f_obj = open(self.filename, 'r')
         if self.configdict["SkipFirstLine"]:
             self.f_obj.readline()
@@ -59,25 +79,81 @@ class FileReader(BaseProcessor):
             retries = 0
             while not success and retries < self.configdict["MaxRetries"]:
                 try:
-                    self.output_queue.put(self.f_obj.readline())
+                    self.queue.put(self.f_obj.readline(),
+                                   True,
+                                   self.configdict["QueueTimeout"])
                     success = True
                 except Full:
                     self.warning("Output queue appears full. Retries: {0}"
                                  .format(retries))
                     retries += 1
 
+
+class FileWriter(FileProcessor):
+    ''' Reads from a queue, writes to a file
+    '''
+
+    defaults = {
+        "Chunksize": 200,
+        "MaxRetries": 5,
+        "QueueTimeout": 5,
+        "MaxWriteInterval": 10,
+        "AppendNewLine": False
+    }
+
+    def __init__(self, logqueue, message_conn, filename, queue, **kwargs):
+        super(FileWriter, self).__init__(
+            logqueue,
+            message_conn,
+            filename,
+            queue,
+            **kwargs
+        )
+
+    def beforerun(self):
+        self.info("Opening {0} for writing".format(self.filename))
+        self.f_obj = open(self.filename, 'a')
+
+    def process(self):
+        starttime = time.time()
+        writeables = []
+        while (len(writeables) < self.configdict["ChunkSize"]
+               and (time.time() - starttime)
+                < self.configdict["MaxWriteInterval"]):
+            success = False
+            retries = 0
+            while not success and retries < self.configdict["MaxRetries"]:
+                try:
+                    self.queue.get(True, self.configdict["QueueTimeout"])
+                    success = True
+                except Empty:
+                    self.warning("Input Queue appear empty. Retries: {0}"
+                                 .format(retries))
+                    retries += 1
+        self.debug("Writing {0} lines to {1}"
+                   .format(len(writeables), self.filename))
+        self.writelinestofile(writeables)
+
+    def writelinestofile(self, lines):
+        if self.configdict["AppendNewLine"]:
+            writeables = [x + '\n' for x in lines]
+        else:
+            writeables = lines
+        self.f_obj.writelines(writeables)
+        self.f_obj.flush()
+
     def afterrun(self):
-        self.info("Closing {0}".format(self.filename))
-        self.f_obj.close()
+        self.f_obj.flush()
+        os.fsync()
+        super(FileWriter, self).afterrun()
 
 
 class LineProcessor(BaseProcessor):
-
     defaults = {
-        "ReadTimeout":5,
-        "ReadMaxRetries":5,
-        "WriteTimeout":5,
-        "WriteMaxRetries":5
+        "ReadTimeout": 5,
+        "ReadMaxRetries": 5,
+        "WriteTimeout": 5,
+        "WriteMaxRetries": 5
     }
 
     def __init__(self, logqueue, message_conn, input_queue, output_queue, **kwargs):
